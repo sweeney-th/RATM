@@ -1,13 +1,15 @@
 ---
 title: "A Drop in Gun Deaths in February?"
-subtitle: "Investigating a Curious Trend in CDC Gun Deaths 2012-2014"
 author: "Thadryan Sweeney"
 date: "April 15, 2018"
 output:
-    pdf_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+subtitle: Investigating a Curious Trend in CDC Gun Deaths 2012-2014
 ---
 
-This set of gun deaths, collected mostly from the CDC, spans 2012, 2013, and 2014. I was initially interested in building a classifier to see if a machine could predict, with reasonable to strong accuracy, a person's race based on how they died with a gun (initial findings, somewhat eerily? Yes). But in familiarizing myself with the dataset, I noticed something. Each year showed a pronounced drop in gun deaths in February. At first I dismissed this, thinking it was due to the fact that it's the shortest month. It's also only three years of data. I took a look just the same and the findings are a bit unusual given the strength of the pattern. 
+This set of gun deaths, collected mostly from the CDC, spans 2012, 2013, and 2014. I was initially interested in building a classifier to see if a machine could predict, with reasonable to strong accuracy, a person's race based on how they died with a gun (initial findings, somewhat eerily? Yes). But in familiarizing myself with the dataset, I noticed something. Each year showed a pronounced drop in gun deaths in February. At first I dismissed this, thinking it was due to the fact that it's the shortest month. It's also only three years of data. I took a look just the same and the findings are a bit unusual given the strength of the pattern, bringing to mind a significant trend or data quality issue. After adjusting for February having the fewest number of days and examining it in a few different ways, the overall deaths yield z-scores of ~2.5. Further dissection shows that the trend seem to be coming largely from homicides.  
 
 First, we load the data and make sure Feb doesn't have a disproportionate amount of missing values, skewing my analysis. If Feb gun deaths were more poorly documented, for instance, that might be why (I used a random forest imputation strategy in my analysis and wanted to make sure any errors in this weren't the cause of the issue). We will use the raw data.
 
@@ -20,7 +22,7 @@ library("kableExtra")
 library("knitr")
 ```
 
-We will check to see if there is a difference if proportions of "Feb" entries with missing values vs complete values. 
+First, we will check to see if there is a difference in proportions of "Feb" entries with missing values vs complete values to make sure it's not that missing values happened to be concentrated in February. 
 
 ```{R Get Data, Inspect Missing Values}
 
@@ -36,9 +38,10 @@ prop.table(table(d$month))
 # proportions of Feb deaths in complete data by month
 prop.table(table(c.d$month))
 ```
+
 We see proportions of 0.07036846 vs 0.07039739 for month 2. Feb makes up almost exactly as much of the dataset with or without missing records. So we can probably lay that to rest.
 
-## Visual Analysis 
+### Visual Analysis 
 
 We'll now visualize the data for Feb. This is where I started to get suspicious:
 
@@ -52,7 +55,7 @@ data12 <- d[which(d$year == "2012"), ]
 data13 <- d[which(d$year == "2013"), ]
 data14 <- d[which(d$year == "2014"), ]
 
-# extract month data 
+# extract month data from summaries
 d12 <- data.frame(summary(as.factor(data12$month)))
 d13 <- data.frame(summary(as.factor(data13$month)))
 d14 <- data.frame(summary(as.factor(data14$month)))
@@ -61,7 +64,7 @@ d14 <- data.frame(summary(as.factor(data14$month)))
 month <- c(1,2,3,4,5,6,7,8,9,10,11,12)
 
 # make a new dataframe of deaths per month
-month.data <- cbind(month,d12,d13,d14)
+month.data <- cbind(month, d12, d13, d14)
 
 # set new names 
 colnames(month.data) <- c("month", "2012","2013","2014")
@@ -79,13 +82,11 @@ month.data <- melt(month.data, id.vars = "month")
 ggplot(month.data, aes(month,value, col =  variable)) + 
   geom_line() +
   # set x and y limits 
-  scale_y_continuous(limits = c(2250,3250), breaks = seq(2250, 3250, by = 250)) +
+  scale_y_continuous(limits = c(2150,3250), breaks = seq(1650, 3350, by = 250)) +
   scale_x_continuous(breaks = seq(1,12, by = 1))
 ```
 
-There is a very obvious drop in Feb. This persists in an obvious way even when the scale of the graph is changed. Is it only due to the fact that it is the shortest month? 
-
-## Numeric Analysis
+There is a very obvious drop in February. This persists in an obvious way even when the scale of the graph is changed. Is it only due to the fact that it is the shortest month? 
 
 To investigate, we will find the average death per day and use that to estimate what the Feb deaths would look like if they were normal.
 
@@ -95,7 +96,7 @@ To investigate, we will find the average death per day and use that to estimate 
 months <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
 # list of days in months
-days   <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+days   <- c(31,28,31,30,31,30,31,31,30,31,30,31)
 
 # restructure the dataframe to have days per month 
 month.data <- cbind(months, days, d12, d13, d14)
@@ -115,6 +116,7 @@ We now have a dataframe where we can make a prediction of what the values would 
 Let's find the deaths per day:
 
 ### Deaths Per Day
+
 ```{R Deaths Per Day}
 
 # get deaths per day by year
@@ -125,21 +127,20 @@ d.per.day14 <- sum(month.data$d14)/365
 # gun deaths per day in this data set
 d.per.day <- mean(c(d.per.day12 , d.per.day13 , d.per.day14))
 
-# show information by year
-# 2012
+# deaths per day in 2012...
 d.per.day12
 # 2013
 d.per.day13
-# 2013
+# 2014
 d.per.day14
-
-# deaths per day
+# deaths per day in dataset
 d.per.day
 ```
 
-Now we can simply multiply the number of days days in the month times the average deaths per day to see what it would be if it was following the trend. We'll call this the "expected" value. We will add another value called "diff.exp" that shows how far off from the expectation the reality is (the "reality"" being the average of the actual observations for that month)
+Now we can simply multiply the number of days days in the month times the average deaths per day to see what it would be if it was following the trend. We'll call this the "expected" value. We will add another value called "diff.exp" that shows how far off from the expectation the reality is (the "reality"" being the average of the actual observations for that month in the three years)
 
 ### "Expected" Deaths
+
 ```{R Expected vs Reality}
 
 # iterate by rows 
@@ -166,9 +167,10 @@ kable(month.data) %>%
 ```
 
 ### Z-Score of Expected Deaths
+
 We now have a table of the expected values based on the average, as well as the difference between the expected and actual averages.
 
-February is still looking pretty weird. To increase the rigor of our poking around, we will look at the z-scores. We will now add a column representing the z-score of the "diff.expected" column. We will also re-frame the data so that only the columns we currently need are displayed so it's obvious whats going on. Typically z-scores of either +/- 3.0 or +/- 1.5 are used as starting points in outlier detection.
+February is still looking pretty weird. To increase the rigor of our poking around, we will look at the z-scores. We will now add a column representing the z-score of the "diff.expected" column. We will also re-frame the data so that only the columns we currently need are displayed so it's obvious whats going on. Often, z-scores of either +/- 3.0 or +/- 1.5 are used as starting points in outlier detection in data science projects, so we will start there.
 
 ```{R Z-scores}
 
@@ -189,9 +191,10 @@ Feb's weirdness holds up pretty well to this test as well, clocking in with -2.6
 
 The next largest score deviations are around 0.64, less than a quarter of Feb's. None of them make it even half-way to 1.5, a solid case that 1.5 is more appropriate that 3.0. It appears by this measure, Feb is very much abnormal. If we go with 3.0 (which doesn't seem as contextually appropriate), it still certainly seems odd enough to warrant further investigation. We'll trying sidestepping some of this uncertainty about the relative appropriateness by using quartiles.
 
-
 This gives an inter-quartile range of:
+
 ### IQR
+
 ```{R IQR}
 
 # the interquartle range:
@@ -224,18 +227,20 @@ high
 
 ### Boxplot
 
-At -213.14977, Feb is not an outlier by this definition (though there is no once-and-for-all definition). This seems in keeping with R's boxplot function which a similar method to determine ranges and puts February right at the extreme but not over it:
+At -213.14977, Feb is not an outlier by this definition (though there is no once-and-for-all definition). This seems in keeping with R's box plot function which a similar method to determine ranges and puts February right at the extreme but not over it:
 
-```{R Boxplot}
+```{R Box plot}
 
-# create a boxplot of dif.exp
+# create a box plot of dif.exp
 boxplot(month.data$dif.exp)
 ```
 
 ### Proportions with/without Feb, etc
-A proof reader of mine pointed out that I should look at the different type of gun deaths to see if there was an obvious change in an particular type that changed or if there was simply a change of volume. Let's see if the types of death (as measured by the "intent" feature) change. 
+
+One of the people I asked for input on this projected pointed out to me that I should look at the different type of gun deaths to see if there was an obvious change in an particular type that changed or if there was simply a change of volume. Let's see if the types of death (as measured by the "intent" feature) change. 
 
 We will first look at the data framed without Feb entries at all. We will compare this to the summaries with Feb and the summaries of only Feb.
+
 ```{R Intent of Death in Feb}
 
 # intent proportions in general data 
@@ -249,54 +254,74 @@ prop.table(table(non.feb.data$intent))
 feb.data <- d[which(d$month == 2), ]
 prop.table(table(feb.data$intent))
 ```
+
+While the proportions of the various intents are fairly close with and without February, looking at February in isolation is a little more telling; it appears that the February-only dataset has a noticeably different proportion of homicides vs. Suicides. 
+
 ### Digging Further into "intent"
-There is a slight shift in the proportions, with homicide decreasing and suicide increasing.
 
-Feb has slightly different proportions than the dataset at large.
+Let's build a dataframe entirely around "intent" data and see if we notice any interesting patterns. 
 
-```{R}
+```{R Framing Intent}
 
 # remove NAs so we get a clean frame 
 d <- na.omit(d)
 
 # make a dataframe of the summary of the first month
 d.intent <- d[which(d$month == 1), ]
+
+# replace it with it's summary 
 d.intent <- summary(d.intent$intent)
 
 # add the rest of the months iteratively 
 for(i in 2:12) {
-  data <- d[which(d$month == i), ]
-  d.intent <- rbind(d.intent, summary(data$intent))
+  
+  # get the month
+  current.month <- d[which(d$month == i), ]
+  
+  # add the summary of it to the end of the df
+  d.intent <- rbind(d.intent, summary(current.month$intent))
 }
+
+# create a table of d.intent
 kable(d.intent)
 ```
 
-NEED TO NORMALIZE AGAIN RIGHT HERE FOR MONTH LENTHGs
-### Scaled "intent" Data
-```{R Scaled Data}
+Keep in mind we need to adjust for the variation in the length of the months:
 
-d.intent <- data.frame(d.intent)
+### Adjusted and Scaled "intent" Data
 
-# reuse our days per month vector 
-d.intent <- cbind(d.intent, days)
+We will now adjust the intent data to account for the difference in the months buy dividing the number of each type of deaths by the number of days their month has in the dataset. For months that aren't February, this is simply 3 times the days in the month (times 3 because there are 3 years in the dataset). For February it's (28 x 2) + 29 because of our leap year.  
 
-# results will be the days-adjusted, scaled value
-d.intent$results <- 0
-  
-# divide the results by days in the month to adjust for variation
+```{R Normalized "intent" Data}
+
+# convert to full-on dataframe 
+d.intent <- as.data.frame(d.intent)
+
+# for each row in the dataframe...
 for(i in 1:nrow(d.intent)) {
-  d.intent$results[i] <- d.intent$Homicide[i] / d.intent$days
+  # is it isn't Feb, 
+  if(i != 2) {
+    # divide it by 3 times it's days value,
+    d.intent[i, ] <- d.intent[i, ] / (days[i] * 3)
+  }
+  else {
+    # if it is is Feb. do the same but with a leap year
+    d.intent[i, ] <- d.intent[i, ] / (29 + 28 + 28)
+  }
 }
 
-# scale the summary of intent data 
-#d.intent <- scale(d.intent)
+# scale the data
+d.intent <- scale(d.intent)
 
-# chart the dataframe
+# add the months back
+d.intent <- cbind(months, d.intent)
+
+# make a table
 kable(d.intent) %>%
   row_spec(2, bold = TRUE, color = "blue")
 ```
 
-
+It appears that February has fewer deaths overall, but much more noticeably in Homicides.
 
 # Conclusion
 
@@ -309,6 +334,8 @@ http://www.baltimoresun.com/news/maryland/crime/bs-md-ci-february-homicides-2018
 https://chicago.suntimes.com/news/chicago-gun-violence-february/
 
 https://www.usatoday.com/story/news/2018/03/01/murders-shootings-down-chicago-1st-two-months-2018/385074002/
+
+There are a few results discussing this as part of a nationwide decrease in gun deaths, and some talking about isolated observations of February (and some January) guns deaths decreasing, but none about this specifically. 
 
 It makes me wonder if the pattern (if genuine) held true in 2018 and the years between 2014 and 2018.
 
