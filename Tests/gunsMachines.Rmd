@@ -1,0 +1,160 @@
+---
+title: "gunsMachines"
+author: "Thadryan Sweeney"
+date: "April 11, 2018"
+output: html_document
+---
+
+```{R Sample and partition data}
+data <- read.csv("rfImputedGunData.csv")
+
+# import the go-to R package for ML
+library(caret)
+
+# set a random seed - this just means will be using the same random set each time for now 
+set.seed(8675309)
+
+# sample the data (sample 1)
+s1.data <- data[sample(nrow(data), 20000), ]
+
+# create an idex of 70% entries in the dataframe based on race 
+partitionIndex = createDataPartition(s1.data$race, p = 0.7, list = FALSE)
+
+# train will be the entries in the partition 
+train <- s1.data[ partitionIndex, ]
+
+# test will be the opposite of the ones in the partition 
+test  <- s1.data[-partitionIndex, ]
+```
+
+The first model we will try is k-nearest neighbors. In human terms, the "k-NN" algorithm works by plotting data on a chart based on its features, and classifying it as the identify of the things that it is close to (based on euclidean distance). The "k" represents the number of neighbors that get to "vote" on what it is. For example, if k is 3, the most common of the 3 closest neighbors is the classification given to the unknown. 
+
+```{R Train a KKN classifier, eval=FALSE, include=FALSE}
+
+# train a knn algorithm to predict race in light of all other variables
+m.knn <- train(race ~., method = "knn", data = train)
+
+# take a look at the model 
+m.knn
+```
+
+Kappa is
+This is good haha
+
+Let's use this newly trianed model to predict values in the test dataset
+
+```{R Evaluate the KNN model, eval=FALSE, include=FALSE}
+
+# apply that model tho the test dataframe 
+test$knn.pred = predict(m.knn, newdata = test)
+
+# take the simple accuracy of the KNN model 
+knn.simple.acc <- length(which(test$knn.pred == test$race))/nrow(test)
+knn.simple.acc
+```
+
+One of the most foundational machine learning algorithms is a decision tree. It's pretty much what it sounds like. It creates a simple, flow chart like "tree" of criteria - if x is above this, do this, if y is this do that. The drawback to this is that often decision tress "overfit" a dataset. That is, they "memorize" how to get the right answer on your training set and perform poorly on new data when they are applied. A random forest is a collection of decision trees that reach a consensus, and that can help reduce that risk somewhat (though it is still possible). As notorious as they are for overfitting, they are famous for pulling high quality insights from data that seems like a mess, so they're usually worth considering. We'll train one and see where it gets us. 
+
+```{R Train a Random Forest}
+
+# train a random forest classifier 
+m.rf <- train(race ~., method = "rf", data = train)
+
+# inspect the random forest model 
+m.rf
+```
+
+
+```{R Apply and Evaluate the Random Forest Model}
+
+# apply the random forest model to the test using test as new data
+test$rf.pred <- predict(m.rf, newdata = test)
+
+# show the simple accuracy 
+rf.simple.acc <- length(which(test$rf.pred == test$race))/nrow(test)
+rf.simple.acc
+```
+
+
+```{R Train the Support Vector Machine, eval=FALSE, include=FALSE}
+
+# we will use the svm implementation in the e1071 as we are using R 3.2
+library("e1071")
+
+# train an svm model 
+m.svm <- svm(race ~., data = train, scale = FALSE)
+
+# show some details on the model 
+m.svm
+```
+
+Let's take a look at what our SVM has to offer:
+
+```{R Evaluate the SVM, eval=FALSE, include=FALSE}
+
+# apply the svm prediction to the test frame use test as new data
+test$svm.pred = predict(m.svm, newdata = test)
+
+# simple accuracy on the data it was trainied on 
+svm.simple.acc <- length(which(test$svm.pred == test$race))/nrow(test)
+svm.simple.acc
+```
+
+
+Number of variables available for splitting at each tree node. In the random forests literature, this is referred to as the mtry parameter.
+
+Maybe the vote function is messing me up. Very slight improvment. But this might be better on unknown data than an individual model. 
+
+```{R Create and ensemble using a vote function, eval=FALSE, include=FALSE}
+
+# define a function that gets the most common input 
+vote <- function(x) 
+{
+  # find and tablute max for unique values
+  uniq.x <- unique(x)
+  uniq.x[which.max(tabulate(match(x, uniq.x)))]
+}
+```
+
+```{R eval=FALSE, include=FALSE}
+test$race.as.num <- as.numeric((test$race))
+
+for(i in 1:nrow(test)) {
+  test$consesus[i] = as.numeric(vote( c(test$svm.pred[i], test$knn.pred[i], test$rf.pred[i])) )
+}
+length(which(test$consesus == test$race.as.num))/nrow(test)
+```
+
+
+
+```{r}
+plot(m.rf$finalModel)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#library(rattle)
+#fancyRpartPlot(t$finalModel)
+
+m.rf$finalModel
+attributes(m.rf)
+```
+
+
+
+
+

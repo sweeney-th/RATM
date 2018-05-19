@@ -1,0 +1,61 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{R}
+
+# get data
+#d <- read.csv("featEngRfImputedGunData.csv", stringsAsFactors = FALSE)
+d <- read.csv("rfImputedGunData.csv", stringsAsFactors = FALSE)
+#d <- read.csv("summerOnlyFE.csv", stringsAsFactors = FALSE)
+
+# get rid of extraneous data 
+d$X <- NULL
+d$hispanic <- NULL
+
+
+```
+
+```{R}
+
+library(caret)
+
+# set a random seed
+set.seed(8675309)
+
+# sample the data (sample 1)
+s1.data <- d[sample(nrow(d), 20000), ]
+
+# create an idex of 80% entries in the dataframe based on race 
+partitionIndex = createDataPartition(s1.data$race, p = 0.8, list = FALSE)
+
+# train will be the entries in the partition 
+train <- s1.data[ partitionIndex, ]
+
+# test will be the opposite of the ones in the partition 
+test  <- s1.data[-partitionIndex, ]
+```
+
+```{R Tune}
+
+# basic cross validation try "rcv"
+ctrl <- trainControl(method = "cv", number = 10, selectionFunction = "best")
+
+
+silence <- capture.output(m1 <- train(race ~., method = "nnet", data = train, trControl = ctrl))
+
+m1
+
+test$m1.pred <- predict(m1, newdata = test)
+
+simple.acc <- length(which(test$m1.pred == test$race))/nrow(test)
+simple.acc * 100
+```
+with FE
+5     1e-01  0.8898101  0.7746880
+[1] 89.01117
+
+without
+
+[1] 87.79797

@@ -1,0 +1,62 @@
+---
+title: "gunsTestMachines"
+author: "Thadryan Sweeney"
+date: "May 14, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{R Sample and partition data}
+
+# import the go-to R package for ML
+library(caret)
+
+data <- read.csv("rfImputedGunData.csv")
+
+data$X <- NULL
+data$hispanic <- NULL
+
+# set a random seed - this just means will be using the same random set each time for now 
+set.seed(8675309)
+
+# sample the data (sample 1)
+s1.data <- data[sample(nrow(data), 20000), ]
+
+# create an idex of 70% entries in the dataframe based on race 
+partitionIndex = createDataPartition(s1.data$race, p = 0.7, list = FALSE)
+
+# train will be the entries in the partition 
+train <- s1.data[ partitionIndex, ]
+
+# test will be the opposite of the ones in the partition 
+test  <- s1.data[-partitionIndex, ]
+```
+
+```{R Train a Test Model}
+
+# library(inTrees) look into this with metods "rfRules"
+
+# set tuning parameters
+ctrl <- trainControl(method = "cv", number = 10, selectionFunction = "best")
+
+# train a random forest classifier 
+m <- train(race ~., method = "rf", data = train)#m, trControl = ctrl)
+
+# inspect the random forest model 
+m
+
+# apply the random forest model to the test using test as new data
+test$m.pred <- predict(m, newdata = test)
+
+# show the simple accuracy 
+m.simple.acc <- length(which(test$m.pred == test$race))/nrow(test)
+m.simple.acc
+```
+
+```{r}
+
+
+```

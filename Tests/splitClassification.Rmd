@@ -1,0 +1,260 @@
+---
+title: "Split Method Proof of Concept"
+output: html_notebook
+---
+
+
+```{R Data}
+
+# get data
+d <- read.csv("summerOnlyFE.csv", stringsAsFactors = FALSE)
+
+# get rid of extraneous data 
+d$X <- NULL
+d$hispanic <- NULL
+
+#
+#d <- data.frame(lapply(d, as.character), stringsAsFactors=FALSE)
+
+# get counts
+message("Initial:")
+summary(d$race)
+
+# see proportions 
+prop.table(table(d$race))
+
+message("A/H/N")
+ahn.d <-subset(d, !(race %in% c("White", "Black")))
+prop.table(table(ahn.d$race))
+
+message("B/W")
+bw.d <-subset(d, (race %in% c("White", "Black")))
+prop.table(table(bw.d$race))
+
+
+(nrow(ahn.d) + nrow(bw.d)) == nrow(d)
+```
+
+
+
+```{R Sample and Partition}
+
+library(caret)
+
+# set a random seed
+set.seed(8675309)
+
+# sample the data (sample 1)
+s1.data <- bw.d[sample(nrow(bw.d), 20000), ]
+
+# create an idex of 70% entries in the dataframe based on race 
+partitionIndex = createDataPartition(s1.data$race, p = 0.7, list = FALSE)
+
+# train will be the entries in the partition 
+train <- s1.data[ partitionIndex, ]
+
+# test will be the opposite of the ones in the partition 
+test  <- s1.data[-partitionIndex, ]
+```
+
+```{R Tune}
+
+# basic cross validation try "rcv"
+ctrl <- trainControl(method = "cv", number = 15, selectionFunction = "best")
+```
+
+
+```{R ML Train}
+
+
+
+m1 <- train(race ~., method = "rf", data = train, trControl = ctrl)
+m2 <- train(race ~., method = "lda", data = train, trControl = ctrl)
+m3 <- train(race ~., method = "knn", data = train, trControl = ctrl)
+m4 <- train(race ~., method = "knn", data = train, trControl = ctrl)
+m5 <- train(race ~., method = "rpart", data = train, trControl = ctrl)
+m6 <- train(race ~., method = "glm", data = train, trControl = ctrl)
+
+
+# inspect the random forest modela
+m1
+m2
+m3
+m4
+m5
+m6
+```
+
+
+```{R ML Predict}
+
+# apply the random forest model to the test using test as new data
+test$m1.pred <- predict(m1, newdata = test)
+test$m2.pred <- predict(m2, newdata = test)
+test$m3.pred <- predict(m3, newdata = test)
+test$m4.pred <- predict(m4, newdata = test)
+test$m5.pred <- predict(m5, newdata = test)
+test$m6.pred <- predict(m6, newdata = test)
+```
+
+```{R Consensus}
+
+# define a vote funciton 
+vote <- function(x) 
+{
+  # find and tablute max for unique values
+  uniq.x <- unique(x)
+  uniq.x[which.max(tabulate(match(x, uniq.x)))]
+}
+
+# cast vote between the two 
+for(i in 1:nrow(test)) {
+  test$consensus[i] <- vote(c(test$m3.pred[i], test$m2.pred[i],
+                              test$m1.pred[i], test$m4.pred[i]))
+}
+
+test$consensus <- as.numeric(test$consensus)
+test$consensus[which(test$consensus == 2)] <- "White"
+test$consensus[which(test$consensus == 1)] <- "Black"
+
+message("NNET")
+nnet.simple.acc <- length(which(test$m3.pred == test$race))/nrow(test)
+nnet.simple.acc * 100
+```
+
+
+```{R Assess}
+
+# show the simple accuracy 
+message("RF")
+rf.simple.acc <- length(which(test$m1.pred == test$race))/nrow(test)
+rf.simple.acc * 100
+
+message("LDA")
+lda.simple.acc <- length(which(test$m2.pred == test$race))/nrow(test)
+lda.simple.acc * 100
+
+message("NNET")
+nnet.simple.acc <- length(which(test$m3.pred == test$race))/nrow(test)
+nnet.simple.acc * 100
+
+message("KNN")
+knn.simple.acc <- length(which(test$m4.pred == test$race))/nrow(test)
+knn.simple.acc * 100
+
+message("RPART")
+rpart.simple.acc <- length(which(test$m5.pred == test$race))/nrow(test)
+rpart.simple.acc * 100
+
+message("LR")
+nb.simple.acc <- length(which(test$m6.pred == test$race))/nrow(test)
+nb.simple.acc * 100
+
+message("Consensus") # all but LR
+c.simple.acc <- length(which(test$consensus == test$race))/nrow(test)
+c.simple.acc * 100
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+88.58143
+```{r eval=FALSE, include=FALSE}
+saveRDS(m1, "rf.splitClassification.rds")
+saveRDS(m2, "lda.splitClassification.rds")
+saveRDS(m3, "nnet.splitClassification.rds")
+saveRDS(m4, "knn.splitClassification.rds")
+saveRDS(m5, "rpart.splitClassification.rds")
+```
+
+```{R Feature Engineering, eval=FALSE, include=FALSE}
+
+### FE ideas
+
+#d <- read.csv("rfImputedGunData.csv", stringsAsFactors = FALSE)
+
+# get rid of extraneous data 
+#d$X <- NULL
+#d$hispanic <- NULL or not get rid?
+#
+
+# Summer    yes/no (June July Aug Sept)
+# Minority  yes/no - needs to know rance -_-
+# Suicide dummy
+# homicide dummy 
+# hs or less dummy 
+
+
+d$summer <- 0 
+d$minority <- 0
+
+# d$summer[which(d$month %in% c(6,7,8,9)) ] <- 1
+for(i in 1:nrow(d)) {
+  if(d$month[i] %in% c(6,7,8,9)) {
+    d$summer[i] <- 1
+  }
+  if(!(d$race[i] %in% c("White"))) {
+    d$minority[i] <- 1
+  }
+}
+
+#bw.d <-subset(d, (race %in% c("White", "Black")))
+
+summer.d <- d %>%
+  select(race, minority) %>%
+  filter(minority == 0)
+summer.d
+```
+
+
+```{r eval=FALSE, include=FALSE}
+
+d$suicide  <- 0 
+d$homicide <- 0 
+
+for(i in 1:nrow(d)) {
+  if(d$intent[i] == "Suicide") {
+    d$suicide[i] <- 1
+  }
+  if(d$intent[i] == "Homicide") {
+    d$homicide[i] <- 1
+  }
+}
+
+fe.d <- d %>%
+  select(education, hsOrLess)
+fe.d
+```
+```{r eval=FALSE, include=FALSE}
+d$hsOrLess <- 0
+
+for(i in 1:nrow(d)) {
+  if(d$education[i] %in% c("HS/GED","Less than HS")) {
+    d$hsOrLess[i] <- 1
+  }
+}
+
+fe.d <- d %>%
+  select(education, hsOrLess)
+fe.d
+```
+
